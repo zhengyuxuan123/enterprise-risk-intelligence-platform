@@ -1,0 +1,352 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: enterprise-risk-platform
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:risk_platform}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+  rabbitmq:
+    host: ${RABBIT_HOST:127.0.0.1}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USER:guest}
+    password: ${RABBIT_PASSWORD:guest}
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+app:
+  knowledge:
+    # 原始文件按文档 ID、版本和 SHA-256 保存；生产环境请挂载持久化磁盘。
+    storage-dir: ${APP_KNOWLEDGE_STORAGE_DIR:./data/knowledge-files}
+    worker-delay-ms: ${APP_KNOWLEDGE_WORKER_DELAY_MS:1000}
+    outbox-delay-ms: ${APP_KNOWLEDGE_OUTBOX_DELAY_MS:1500}
+    # 扫描版 PDF 可选 OCR，需要安装 Tesseract 和 chi_sim 语言包。
+    ocr-enabled: ${APP_KNOWLEDGE_OCR_ENABLED:false}
+    ocr-command: ${APP_KNOWLEDGE_OCR_COMMAND:tesseract}
+    ocr-max-pages: ${APP_KNOWLEDGE_OCR_MAX_PAGES:10}
+  jwt:
+    secret: ${JWT_SECRET:enterprise-risk-platform-secret-key-change-me-2026-very-long}
+    expiration-seconds: 86400
+  redis:
+    enabled: ${APP_REDIS_ENABLED:true}
+  mq:
+    enabled: ${APP_MQ_ENABLED:false}
+  ai:
+    enabled: true
+    # 默认底座：火山方舟（OpenAI 兼容模式）
+    base-url: ${AI_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}
+    api-key: ${AI_API_KEY:}
+    # 主模型：**留空 = 运行时自动从「账号实际可用的模型」里选一个**（推荐）。
+    # 为什么不再写死一个模型名：模型 ID 会随版本变，而且「免费额度用尽 / 模型下架 / 账号没开通」
+    # 这三种情况随时会发生——方舟把「没开通」报成 HTTP 404 ModelNotOpen，写死一个名字就会被钉死。
+    # 想固定用某一个，填 AI_MODEL=<模型ID> 或 <接入点 ep-xxx> 即可。
+    model: ${AI_MODEL:}
+    # 降级候选链（逗号分隔）：主模型报「未开通 / 不存在 / 限流 429 / 5xx」时按顺序自动换下一个。
+    # 留空也能工作——第一轮全失败后会自动拉 GET /v3/models 补试账号里确实可用的模型。
+    # 示例：setx AI_MODEL_CANDIDATES "doubao-seed-1-6-250615,doubao-1-5-pro-32k-250115"
+    model-candidates: ${AI_MODEL_CANDIDATES:}
+    # 自动降级开关（默认开）。关掉则只认上面那一个模型，失败就失败。
+    model-auto-fallback: ${AI_MODEL_AUTO_FALLBACK:true}
+    # 自动发现账号可用模型：GET /v3/models 是只读的权限列举接口，不消耗 token、不产生推理费用。
+    # 只在「主模型不可用」后或界面主动刷新时才请求，正常调用不会多花一次网络往返。
+    model-discovery: ${AI_MODEL_DISCOVERY:true}
+    # 后台自动任务（MQ 触发的主动预警等）是否允许消耗模型额度。
+    # 默认 false：未经使用者主动触发的调用一律不烧 token —— 免费/试用额度是一次性的，
+    # 后台任务最容易在人不知道的情况下把它跑干。要开就在 AI 分析页把「自动研判」开关打开，
+    # 或设 APP_AI_AUTO_CONSUME=true。页面上的同步/流式分析不受它影响，随时可用。
+    auto-consume: ${APP_AI_AUTO_CONSUME:false}
+    # 单次「模型调用」的 HTTP 超时上限（秒）。
+    # 原来四处硬编码 3 分钟，是整条链上最隐蔽的一环：SSE 连接还活着、模型也还在生成，
+    # 到点却被 HttpClient 掐掉，留痕只写「LLM 流式对话失败: request timed out」，
+    # 落到界面上就是又一次「没有结果」。
+    # 三层的先后关系请保持：**一次调用超时 ≤ SSE 连接上限**，
+    # 否则必然出现「连接还在、对面已经把它掐了」这种查不出来的失败。
+    chat-timeout-seconds: ${APP_AI_CHAT_TIMEOUT:600}
+    # ---- 深度思考（thinking）开关：等待时间里最容易被忽略的一块 ----
+    # 推理型模型会把「思考过程」也算进生成过程：同样的答复，它会先暗中推导一遍再正式输出一遍，
+    # 而且思考 token 还占用输出预算（历史上出现过「想了很久、正文却是空的」）。
+    # 本平台的任务是「查数据 + 按固定章节写结论」，不需要多步自我推导。
+    #   disabled = 明确关闭（推荐，也是默认）
+    #   enabled  = 明确开启
+    #   空串     = 完全不下发该字段，沿用上游默认（等同改造前的行为）
+    # 注意：并非所有模型都支持该字段；不支持的上游会忽略它，不会导致请求失败。
+    thinking-type: ${APP_AI_THINKING_TYPE:disabled}
+    # 仅在「没配独立的向量化服务商」时作为兜底；留空则不承担向量化职责
+    embedding-model: ${AI_EMBEDDING_MODEL:}
+  rag:
+    vector-weight: ${APP_RAG_VECTOR_WEIGHT:0.6}
+    embedding-enabled: ${APP_RAG_EMBEDDING_ENABLED:true}
+    # 向量化模式：
+    #   local  = 本地哈希向量（默认）——零成本、不联网、不需要任何 Key，语义检索永远可用
+    #   remote = 只用第三方 embedding（OpenAI 兼容），需要下面三项都配齐
+    #   auto   = 第三方优先，失败/熔断时自动回落本地向量
+    # 默认 local 的原因：不把密钥送到外部服务，也不让第三方欠费/断网把检索打回裸关键词。
+    embedding-mode: ${APP_RAG_EMBEDDING_MODE:local}
+    # 本地向量维度（仅在 local / auto 回落时生效）
+    local-embedding-dim: ${APP_RAG_LOCAL_EMBEDDING_DIM:512}
+    embedding-cache-ttl-minutes: ${APP_RAG_EMBEDDING_TTL:1440}
+    # ---- 可选的第三方 embedding（仅 remote / auto 模式需要）----
+    # 三个都配齐才会启用：改 embedding-mode=remote（或 auto）后，
+    #   setx APP_EMBEDDING_BASE_URL https://api.siliconflow.cn/v1
+    #   setx APP_EMBEDDING_MODEL BAAI/bge-m3
+    #   setx APP_EMBEDDING_API_KEY sk-xxxxx
+    # 留空即不使用第三方，向量化走本地通道（不产生任何费用、不暴露密钥）。
+    embedding-base-url: ${APP_EMBEDDING_BASE_URL:}
+    embedding-api-key: ${APP_EMBEDDING_API_KEY:}
+    # 留空则用 app.ai.embedding-model；填了就以此为准
+    embedding-model: ${APP_EMBEDDING_MODEL:}
+    # 0=不裁剪维度；部分服务商支持按需降维（如 OpenAI text-embedding-3）
+    embedding-dimensions: ${APP_EMBEDDING_DIMENSIONS:0}
+    embedding-timeout-seconds: ${APP_EMBEDDING_TIMEOUT:20}
+    # ---- 检索增强流水线 ----
+    # ① 查询改写：把疑问句改写成检索式并做领域同义扩展（规则式，不消耗 token）
+    query-rewrite: ${APP_RAG_QUERY_REWRITE:true}
+    # ② 多路召回：原文 / 改写式 / 扩展式 / 向量 各自成一路，用 RRF 融合
+    multi-recall: ${APP_RAG_MULTI_RECALL:true}
+    # ③ 二阶段精排：候选池内的多信号重排 + MMR 去重
+    rerank: ${APP_RAG_RERANK:true}
+    rerank-pool: ${APP_RAG_RERANK_POOL:25}
+    # 精排分相对融合分的权重：1=完全按精排，0=回到融合分
+    rerank-weight: ${APP_RAG_RERANK_WEIGHT:0.6}
+    # MMR 多样性：越大越看重相关性，越小越惩罚重复文档
+    diversity: ${APP_RAG_DIVERSITY:0.78}
+    min-score: ${APP_RAG_MIN_SCORE:6.0}
+    relative-floor: ${APP_RAG_RELATIVE_FLOOR:0.45}
+    # ---- 持久化向量索引（Lucene，本地磁盘，零 API 成本）----
+    # 关掉则退回「每次请求全量实时重算」的旧行为（一致性更好，但文档量一大就慢）。
+    index-enabled: ${APP_RAG_INDEX_ENABLED:true}
+    # 索引落盘位置；相对路径以进程工作目录为准
+    index-dir: ${APP_RAG_INDEX_DIR:./data/rag-index}
+    # 全量重建开关：改了向量维度 / 换了 embedding 服务商后设 true，重启一次即重建
+    index-rebuild: ${APP_RAG_INDEX_REBUILD:false}
+    # 兜底路径里「同一企业多久内不重复做一次全量索引同步」（毫秒，0 = 不节流）。
+    # 索引一旦不可用，searchByMemory 每次查询都会重新捞全量数据 + 重新向量化，
+    # 延迟直接从毫秒跳到秒级。节流后最坏是「用略旧的索引」，比每次查询都卡一秒划算。
+    sync-throttle-ms: ${APP_RAG_SYNC_THROTTLE_MS:30000}
+    # ---- 结构化切片并入语料（指标/投诉/风险事件等硬证据）----
+    structured-corpus: ${APP_RAG_STRUCTURED_CORPUS:true}
+    # 并入上限：切片过多会稀释文档召回，宁少勿多
+    structured-max: ${APP_RAG_STRUCTURED_MAX:12}
+    # 保底名额：至少保证几条结构化证据进结果（独立占位，不与文档切片抢名额；0 = 不保底）
+    structured-guarantee: ${APP_RAG_STRUCTURED_GUARANTEE:1}
+    # ---- 写入即索引：业务数据一落库就增量进本地向量索引 ----
+    write-through:
+      # 总开关；关掉即回到「提问时才同步」的旧行为
+      enabled: ${APP_RAG_WRITE_THROUGH:true}
+      # 合并窗口：窗口内同一条记录的多次变更只处理最后一次（导入一千行 = 一次批量）
+      merge-window-ms: ${APP_RAG_MERGE_WINDOW:3000}
+      # 写入时是否顺带算向量：auto = 本地向量恒算（零成本），第三方向量留到巡检批量补
+      embed-on-write: ${APP_RAG_EMBED_ON_WRITE:auto}
+      reconcile-enabled: ${APP_RAG_RECONCILE:true}
+      reconcile-interval-minutes: ${APP_RAG_RECONCILE_MINUTES:360}
+  agent:
+    # 工具轮数上限。实际轮数 = min(本值, 深度档位预算)：
+    # 运维设了更严的上限仍生效；没设则由 quick/standard/deep 决定（2 / 3 / 6）。
+    max-iterations: ${APP_AGENT_MAX_ITER:6}
+    # 单次分析的工具调用总配额上限（运维硬上限）。
+    # 实际配额 = min(本值, 深度档位预算)：档位兜底保证同一 depth 的执行结果稳定。
+    max-tool-calls: ${APP_AGENT_MAX_TOOL_CALLS:20}
+    # 单个工具在一次分析里最多被调几次、每种档位能用多少次全部工具，由 AgentBudget 按
+    # depth 统一裁决（quick/standard/deep = 5/9/16）；本值是运维侧的硬上限兜底。
+    # 分析深度档位：一次分析允许「写多长 + 调多少工具 + 等多久」由 AgentBudget 统一裁决。
+    # 实测耗时几乎全部来自模型生成字数（2960 字≈169s，5356 字≈743s），
+    # 因此这是控制等待时间的第一杠杆，比调任何超时都直接。
+    #   quick     → 正文 ≤700 字，单工具 1 次，总工具 5 次，总耗时预算 75s
+    #   standard  → 正文 ≤1500 字，单工具 2 次，总工具 9 次，总耗时预算 180s（默认）
+    #   deep      → 正文 ≤3600 字，单工具 3 次，总工具 16 次，总耗时预算 600s
+    default-depth: ${APP_AGENT_DEFAULT_DEPTH:standard}
+    structured-output: ${APP_AGENT_STRUCTURED:true}
+    cache-enabled: ${APP_AGENT_CACHE:true}
+    cache-ttl-seconds: ${APP_AGENT_CACHE_TTL:600}
+    # 会话记忆：不再按轮数硬截断，改用 token 预算——近期对话保留原文，更早轮压缩成摘要
+    memory-turns: ${APP_AGENT_MEMORY_TURNS:6}
+    memory-token-budget: ${APP_AGENT_MEMORY_TOKEN_BUDGET:1200}
+    # 旧轮摘要方式：extractive=按结构抽取（零 token，默认）；llm=调用模型做一次摘要（有缓存）
+    memory-summary-mode: ${APP_AGENT_MEMORY_SUMMARY_MODE:extractive}
+    # 缺失引用是否自动补齐 [n]（护栏闭环，关闭则回到只标记待核对）
+    citation-repair: ${APP_AGENT_CITATION_REPAIR:true}
+    # 单个工具结果写入模型上下文前的最大字符数（防止一次检索把上下文撑爆）
+    tool-result-max-chars: ${APP_AGENT_TOOL_MAX_CHARS:6000}
+    # 工具执行失败的重试次数（联网检索抖动很常见）
+    tool-retry: ${APP_AGENT_TOOL_RETRY:1}
+    # 复核员发现硬伤后，是否让分析师带意见重写一次（最多 1 轮）。
+    # 触发判定优先用确定性的引用核对结果，所以「要不要重写」这一步本身通常不消耗 token。
+    review-revise: ${APP_AGENT_REVIEW_REVISE:true}
+    # 上游连续失败到阈值后，冷却期内直接输出本地规则报告，不再干等 3 分钟超时。
+    # 这是没有第二把 Key 时的零成本 failover —— 备底座只能是本地规则，而不是另一家厂商。
+    circuit-threshold: ${APP_AGENT_CIRCUIT_THRESHOLD:2}
+    circuit-cooldown-seconds: ${APP_AGENT_CIRCUIT_COOLDOWN:120}
+    # 流式连接的等待上限（秒）。
+    # 旧值硬编码 180 秒，而实测单次分析 169s～743s —— 超过三分钟的分析会被 Spring 主动断连，
+    # 前端读不到 done 事件，就把一次「仍在后台正常进行」的分析显示成「没有结果」。
+    # 必须大于一次分析的最坏耗时，宁可长也不要短。
+    sse-timeout-seconds: ${APP_AGENT_SSE_TIMEOUT:900}
+    # SSE 心跳间隔（秒）：长时间不发包会被中间的网关 / nginx 按空闲连接掐断
+    sse-heartbeat-seconds: ${APP_AGENT_SSE_HEARTBEAT:15}
+    # 单个工具调用的超时上限（秒）。原来硬编码 120s，一个慢工具能把整轮拖死。
+    tool-timeout-seconds: ${APP_AGENT_TOOL_TIMEOUT:60}
+    # 流式正文判定阈值（字符）：过渡语通常很短，缓冲超过该值即认定为正文并转直传
+    stream-flush-chars: ${APP_AGENT_STREAM_FLUSH_CHARS:400}
+    # 空正文自愈重试时的输出预算上限（token）。
+    # 推理型模型会把「思考 token」也算进输出预算，服务商默认上限偏小时会出现
+    # 「想了很久但正文为空（finish_reason=length）」，界面上就成了"这次分析没有结果"。
+    # 重试时显式给足预算（并改为非流式、不带工具），是绕开该问题最直接的办法。
+    retry-max-tokens: ${APP_AGENT_RETRY_MAX_TOKENS:8192}
+    # ---- 提速：把「模型往返」换成「本地毫秒级取数」 ----
+    # 等待时间的账是这样分布的（实测分析 #86，总 252 秒）：
+    #   2 次模型调用 ≈ 252 秒（各约 126 秒）     5 次工具调用 ≈ 106 毫秒（占 0.04%）
+    # 第一次模型往返的唯一作用是让模型「决定要调哪些工具」——而这件事完全可以由平台
+    # 按确定性参数先做完。开启后：本地并发预取核心证据塞进上下文，模型第一轮直接成稿。
+    prefetch-tools: ${APP_AGENT_PREFETCH_TOOLS:true}
+    # 快答档（quick）是否跳过「结构化抽取」那次独立的模型调用。
+    # 成稿后系统原本还要再单独调一次 LLM 把正文读一遍抽成 JSON，
+    # 它不进 llm_calls 埋点，所以明细账里看不见，但用户确实在等它。
+    # 关闭本次开关后改走本地确定性解析，界面上的风险等级 / 建议照常可用。
+    skip-structure-extract: ${APP_AGENT_SKIP_STRUCTURE_EXTRACT:true}
+    # 请求单飞：完全相同的同步请求只真正执行一次（防双击/重试重复烧额度）
+    single-flight: ${APP_AGENT_SINGLE_FLIGHT:true}
+    single-flight-wait-seconds: ${APP_AGENT_SINGLE_FLIGHT_WAIT:180}
+    # 确定性核对没发现问题时，是否仍要调一次模型做复核。
+    # 默认 false：绝大多数成稿不需要多付这次推理。
+    review-always-llm: ${APP_AGENT_REVIEW_ALWAYS_LLM:false}
+  # ---- 已迁到 Python：/api/ai/* 全部由 Python 服务承接 ----
+  # 2026-09-21 起默认开启。**Java 侧的 AiController / AgentService / RAG / 联网已删除**，
+  # 所以这个开关一旦关掉，/api/ai/* 会全部 404 —— 它不再是"要不要用新实现"的开关，
+  # 而是"Python 服务在不在"的开关。想回退只能从备份恢复 Java 源码后重新打包。
+  #
+  # 三条硬约束（实现见 PythonAgentForwardFilter）：
+  #   ① 只转发白名单里的路径；
+  #   ② 只转发已授权的请求 —— Filter 跑在 @PreAuthorize 之前，直接转发会把方法级鉴权绕过去；
+  #   ③ Python 连不上/超时会返回错误（Java 侧已无兜底实现，回退不了）。
+  agent-python:
+    enabled: ${APP_AGENT_PYTHON_ENABLED:true}
+    base-url: ${APP_AGENT_PYTHON_BASE_URL:http://127.0.0.1:8081}
+    # 完整接管：Python 侧已实现 Java AiController 的全部 32 个端点，374 条对账测试通过，
+    # 2026-09-21 完成线上双跑对账（health / models / agents / rag-status 逐字段对齐，
+    # 真实 analyze 5 组用例两侧均 200 且 degrade=NONE）。
+    #
+    # 前端从 /api/ai/models 读 8 个字段：recommended / available / current / autoConsume /
+    # autoFallback / availableCount / lastSwitch / unavailable —— Python 侧全部有真值。
+    #
+    # 若要把某个端点临时收回 Java 处理，从白名单里去掉即可（但 Java 侧已无实现，会 404）。
+    forward-paths: ${APP_AGENT_PYTHON_PATHS:/api/ai/*}
+    # 转发的 HTTP 超时。必须 ≥ 一次分析的最坏耗时，否则"连接还在、这边先掐了"。
+    # 前端 axios 给 /ai/analyze 的是 660s，服务端 SSE 预算 900s，这里取 660 与前端对齐。
+    timeout-seconds: ${APP_AGENT_PYTHON_TIMEOUT:660}
+  # 联网检索（Agent 的 web_search 工具）。
+  # 默认通道是「免 Key 直连抓取」：直接请求搜索引擎结果页并解析标题/链接/摘要，
+  # 不需要 API Key、不需要开通任何插件，也不会把密钥发往外部服务。
+  # 降级选项才是火山方舟 Responses API（/api/v3/responses + tools:[{type:"web_search"}]）——
+  # 它要一把 Key，且必须先在控制台免费开通「联网内容插件」
+  # （https://console.volcengine.com/common-buy/CC_content_plugin），否则返回 404 ToolNotOpen。
+  # 注意：方舟的 OpenAI 兼容 /chat/completions 不支持 web_search，只在正文给引用标记、拿不到链接。
+  web-search:
+    enabled: ${APP_WEB_SEARCH_ENABLED:true}
+    # auto   = MCP → 直连 → API，谁先用谁的（默认）
+    # mcp    = 只用 MCP，拿不到结果也不回退
+    # direct = 只用免 Key 直连，任何情况下都不下发 API Key
+    # api    = 只用方舟 Responses API（需要 Key + 已开通插件）
+    mode: ${APP_WEB_SEARCH_MODE:auto}
+    # ---- MCP 通道：接任何实现了 Model Context Protocol 的检索服务 ----
+    # 开起来并给出 command（本地子进程）或 url（远端 HTTP）即可；不配就自动跳过、走直连。
+    mcp:
+      # 默认开：真正的开关其实是「有没有给 command / url」——
+      # 没配就 isEnabled()=false，auto 模式自动跳过、走直连，不会报错也不会拖慢。
+      # 这样用户只要填上 APP_WEB_SEARCH_MCP_COMMAND 就能直接生效，不用再记得翻这个开关。
+      enabled: ${APP_WEB_SEARCH_MCP_ENABLED:true}
+      # stdio = 本地起子进程按行交换 JSON-RPC；http = 直连 Streamable HTTP 端点。
+      # 留空则按「给了 command 就 stdio、给了 url 就 http」自动判断。
+      transport: ${APP_WEB_SEARCH_MCP_TRANSPORT:}
+      # stdio 模式的启动命令，例如：
+      #   npx -y @modelcontextprotocol/server-brave-search   （需环境变量 BRAVE_API_KEY）
+      #   npx -y tavily-mcp                                  （需环境变量 TAVILY_API_KEY）
+      # 含空格的路径用引号包起来即可。
+      command: ${APP_WEB_SEARCH_MCP_COMMAND:}
+      # http 模式的端点地址
+      url: ${APP_WEB_SEARCH_MCP_URL:}
+      # 附加请求头，逗号分隔，例如 "Authorization: Bearer xxx"
+      headers: ${APP_WEB_SEARCH_MCP_HEADERS:}
+      # 直接点名要调哪个工具（留空则先 tools/list 自动挑一个检索类的）
+      tool-name: ${APP_WEB_SEARCH_MCP_TOOL_NAME:}
+      # 调用参数模板：{q} 检索词、{n} 条数。各家参数名不统一，按需改。
+      # 留空则用内置默认 {"query":"{q}","count":{n}}（brave / 多数官方 Server 的写法）。
+      # 注意：这里刻意不把默认值写进 YAML——花括号在 YAML 与占位符解析里都是敏感字符，
+      # 写进去一旦解析失败整个应用起不来，代价太大。
+      args-template: ${APP_WEB_SEARCH_MCP_ARGS_TEMPLATE:}
+      timeout-seconds: ${APP_WEB_SEARCH_MCP_TIMEOUT:60}
+    # 直连引擎顺序（实测：DuckDuckGo 国内不可达、搜狗有反爬，故用 bing → 360）
+    direct-engines: ${APP_WEB_SEARCH_ENGINES:bing,so360}
+    # 单个引擎的抓取超时
+    direct-timeout-seconds: ${APP_WEB_SEARCH_DIRECT_TIMEOUT:10}
+    # 留空则跟随主推理底座的同源地址 + /responses
+    base-url: ${APP_WEB_SEARCH_BASE_URL:}
+    # 留空则跟随主底座模型（即运行时自选/自动降级后的那个）
+    model: ${APP_WEB_SEARCH_MODEL:}
+    # 独立的一把 Key：不再复用主推理客户端的 Key，避免换推理厂商连带搞坏检索。
+    # 留空则依次回落 AI_API_KEY / OPENAI_API_KEY / 主客户端 Key。
+    api-key: ${APP_WEB_SEARCH_API_KEY:}
+    # 单轮最多用几个检索关键词（1~50）
+    max-keyword: ${APP_WEB_SEARCH_MAX_KEYWORD:3}
+    # 附加垂类搜索源，逗号分隔；留空即全网。可选：douyin（抖音百科）moji（墨迹天气）toutiao（头条图文）
+    sources: ${APP_WEB_SEARCH_SOURCES:}
+    max-results: ${APP_WEB_SEARCH_MAX_RESULTS:6}
+    timeout-seconds: ${APP_WEB_SEARCH_TIMEOUT:60}
+    # 路由没命中「政策/监管/行情/舆情」等强联网信号时，要不要补一手把 web_search 开放给模型。
+    # signal（默认）= 命中「外部意图信号」（行业/同行/公开/最新/对照/联网…）才补位。
+    #   这是有代价的取舍：无条件开放会让「上季度指标怎么样」这类纯内部问题也挂上联网工具，
+    #   既撑大工具清单，又给模型一个它其实用不上的选项；
+    #   只在有外部对照意图时补位，才能既救回「客户流失升高 + 联网对照行业做法」这类真需求，
+    #   又不打扰纯内部查询。
+    # always = 只要联网可用就无条件开放（不占专员名额）。
+    # never  = 只有命中 web-researcher 强信号的那次分析才能联网。
+    always-offer: ${APP_WEB_SEARCH_ALWAYS_OFFER:signal}
+  # ---- 联网检索的三道闸门（成本与质量）----
+  web:
+    # 单次分析最多发起几次联网检索（模型拿到不相关结果会惯性重搜，必须外力刹住）
+    max-calls: ${APP_WEB_MAX_CALLS:4}
+    # 单次检索最多保留几条来源（即使搜索引擎返回更多）
+    max-sources: ${APP_WEB_MAX_SOURCES:6}
+    # 来源相关性回检阈值（0~1）：低于它既不进模型上下文，也不进前端参考来源卡
+    min-relevance: ${APP_WEB_MIN_RELEVANCE:0.16}
+    # 词面完全没命中时，本地余弦至少要达到这个值才放行
+    min-cosine: ${APP_WEB_MIN_COSINE:0.18}
+  # 评估回归：每轮报告落盘留档，与上一份基线对比产生「真正的回归」判定
+  eval:
+    report-dir: ${APP_EVAL_REPORT_DIR:.ai-eval-reports}
+    max-history: ${APP_EVAL_MAX_HISTORY:60}
+    # 门禁：六维加权综合分低于该值（或存在新增回归、安全维度未满分）即判定不通过
+    gate-score: ${APP_EVAL_GATE_SCORE:70}
+  # 通知通道：Agent 提议「通知责任人」被审批通过后的真实投递方式。
+  # 未配置 webhook 时只写审计日志并明确回执为「已登记待人工投递」，绝不假装已送达。
+  notify:
+    webhook-url: ${APP_NOTIFY_WEBHOOK_URL:}
+    timeout-seconds: ${APP_NOTIFY_TIMEOUT:8}
+  # 事件驱动的主动预警：不等人提问，业务事件自己唤起 Agent。
+  # 成本闸门在这里 —— 每家企业每天最多研判 daily-limit 次，超了就不再调模型。
+  # 注意：这是**后台自动**调用，还要同时满足 app.ai.auto-consume=true 才会真的消耗模型额度。
+  proactive:
+    enabled: ${APP_PROACTIVE_ENABLED:true}
+    # 单企业每日研判上限。指标一抖就触发的话，没有这个闸门一天能烧掉几百次调用。
+    daily-limit: ${APP_PROACTIVE_DAILY_LIMIT:5}
+    # 触发后只认这段时间内新产生的高危事件，避免翻旧账重复研判
+    fresh-minutes: ${APP_PROACTIVE_FRESH_MINUTES:5}
+    # 以哪个账号身份执行自动研判（需要它对企业有可见权限）
+    system-username: ${APP_PROACTIVE_SYSTEM_USER:admin}
+  # 写动作审批：Agent 只能「提议」，真正执行必须有人在队列里确认。
+  # 动作类型限定为建工单 / 指派责任人 / 改风险事件状态，核心业务数据一律不开放。
+  action-approval:
+    enabled: ${APP_ACTION_APPROVAL_ENABLED:true}

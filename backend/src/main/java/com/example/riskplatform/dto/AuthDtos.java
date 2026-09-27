@@ -1,0 +1,2 @@
+package com.example.riskplatform.dto;import jakarta.validation.constraints.NotBlank;import lombok.Data;import java.util.List;
+public class AuthDtos{@Data public static class LoginRequest{@NotBlank private String username;@NotBlank private String password;}@Data public static class LoginResponse{private String token;private Long userId;private String username;private String realName;private Long deptId;private List<String>permissions;private List<String>roles;private String dataScope;}}

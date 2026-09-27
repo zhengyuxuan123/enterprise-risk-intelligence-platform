@@ -1,0 +1,3 @@
+package com.example.riskplatform.entity;
+import com.baomidou.mybatisplus.annotation.*;import lombok.Data;import java.time.*;import java.math.BigDecimal;
+@Data @TableName("risk_event") public class RiskEvent{@TableId(type=IdType.AUTO)private Long id;private String eventNo;private Long companyId;private Long ruleId;private String riskType;private String riskTitle;private String riskLevel;private String status;private BigDecimal triggerValue;private BigDecimal thresholdValue;private LocalDate metricDate;private Long assigneeUserId;private String evidenceJson;private String handleResult;private String reviewComment;private Long createdBy;private LocalDateTime createdAt;private LocalDateTime updatedAt;}

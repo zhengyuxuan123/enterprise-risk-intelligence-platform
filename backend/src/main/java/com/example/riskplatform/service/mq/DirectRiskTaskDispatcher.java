@@ -1,0 +1,2 @@
+package com.example.riskplatform.service.mq;import com.example.riskplatform.service.RiskEngineService;import lombok.RequiredArgsConstructor;import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;import org.springframework.stereotype.Service;
+@Service @RequiredArgsConstructor @ConditionalOnProperty(name="app.mq.enabled",havingValue="false",matchIfMissing=true)public class DirectRiskTaskDispatcher implements RiskTaskDispatcher{private final RiskEngineService engine;public void dispatch(Long id){engine.evaluateMetric(id);}}

@@ -1,0 +1,1 @@
+package com.example.riskplatform.mapper;import com.baomidou.mybatisplus.core.mapper.BaseMapper;import com.example.riskplatform.entity.KnowledgeDocument;public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocument>{}

@@ -1,0 +1,3 @@
+package com.example.riskplatform.security;
+import com.example.riskplatform.common.BusinessException;import org.springframework.security.core.context.SecurityContextHolder;import org.springframework.stereotype.Service;
+@Service public class CurrentUserService{public LoginUser current(){Object p=SecurityContextHolder.getContext().getAuthentication().getPrincipal();if(p instanceof LoginUser u)return u;throw new BusinessException(401,"未登录");}public Long userId(){return current().getUser().getId();}public Long deptId(){return current().getUser().getDeptId();}public Integer securityLevel(){Integer x=current().getUser().getSecurityLevel();return x==null?1:x;}public String dataScope(){return current().getDataScope();}}

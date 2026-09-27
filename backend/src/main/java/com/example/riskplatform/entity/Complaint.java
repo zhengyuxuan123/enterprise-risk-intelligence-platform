@@ -1,0 +1,3 @@
+package com.example.riskplatform.entity;
+import com.baomidou.mybatisplus.annotation.*;import lombok.Data;import java.time.*;import java.math.BigDecimal;
+@Data @TableName("complaint") public class Complaint{@TableId(type=IdType.AUTO)private Long id;private String complaintNo;private Long companyId;private LocalDate complaintDate;private String customerName;private String productName;private String category;private String description;private String severity;private Integer repeatFlag;private Integer firstResponseMinutes;private BigDecimal solveHours;private Integer slaExceeded;private String rootCause;private String churnRisk;private Integer satisfaction;private String status;private LocalDateTime createdAt;}

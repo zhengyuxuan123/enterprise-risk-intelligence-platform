@@ -1,0 +1,39 @@
+# 运行时依赖（最小集）
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+httpx>=0.27
+numpy>=1.26
+# 必须：Python 内置 re 不支持 \p{Han} 这类 Unicode 脚本类，
+# 而 Java 的 RagText 用 \p{IsHan} 切中文。没有它就没法与 Java 逐字节对齐。
+regex>=2024.0
+# 结构化语料要查 MySQL（SQLAlchemy Core 只读，不建 ORM 实体，避免与 Spring 侧实体漂移）
+sqlalchemy>=2.0
+pymysql>=1.1
+# 联网检索的结果页解析
+beautifulsoup4>=4.12
+# 报告导出：Word 用 python-docx，PDF 用 reportlab（中文字体取自系统，需 simhei/msyh 等）
+python-docx>=1.1
+reportlab>=4.0
+
+# 开发/测试
+pytest>=8.0
+pytest-asyncio>=0.23
+
+# ---- 编排：LangGraph（**必需**，不再是可选）----
+# 自研 legacy 编排已删除，LangGraph 成为 Agent 的唯一编排实现，缺了这些包
+# 连服务都起不来。版本锁定到实测通过的一组（Python 3.13）：
+#   langgraph                  1.2.12
+#   langchain-core             1.6.4
+#   langchain-openai           1.6.3
+#   langgraph-checkpoint-sqlite 3.1.1   （SQLite 状态快照；默认关闭 checkpoint 时可不装）
+#
+# ⚠️ 不要随意升级 langchain-openai：扩展字段 ``thinking`` 的传参入口在版本间变过，
+# 1.6.x 上 ``model_kwargs`` 会让请求直接 TypeError（详情见
+# ``app.agent.langgraph_impl.ModelChain._thinking_kwargs``）。
+# 升级后必须跑 ``pytest tests/test_stage12_langgraph_perf.py -k wire`` 复核。
+langgraph>=0.2,<2
+langchain-core>=0.3,<2
+langchain-openai>=0.2,<2
+langgraph-checkpoint-sqlite>=2.0

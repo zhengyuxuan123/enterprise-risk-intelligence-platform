@@ -1,0 +1,18 @@
+# 已废弃：LangGraph 依赖不再是可选的（2026-09-23）
+#
+# 自研 legacy 编排已删除，LangGraph 成为 Agent 的**唯一**编排实现，
+# 所以 langgraph / langchain-core / langchain-openai 已经搬进了主 requirements.txt：
+#
+#     python -m pip install -r requirements.txt
+#
+# 本文件只为兼容老的部署脚本保留，内容已是空操作说明 —— 不要继续引用它。
+#
+# 版本说明（Python 3.13，实测通过）：
+#   langgraph                    1.2.12
+#   langchain-core               1.6.4
+#   langchain-openai             1.6.3
+#   langgraph-checkpoint-sqlite  3.1.1
+#
+# ⚠️ 升级 langchain-openai 前先读主 requirements.txt 里那段关于 ``thinking``
+# 扩展字段的说明：1.6.x 上 ``model_kwargs`` 会让请求直接 TypeError。
+# 升级后跑：pytest tests/test_stage12_langgraph_perf.py -k wire

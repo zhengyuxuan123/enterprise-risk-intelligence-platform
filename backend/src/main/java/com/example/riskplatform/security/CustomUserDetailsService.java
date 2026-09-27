@@ -1,0 +1,3 @@
+package com.example.riskplatform.security;
+import com.example.riskplatform.entity.SysUser;import com.example.riskplatform.mapper.UserAuthMapper;import lombok.RequiredArgsConstructor;import org.springframework.security.core.userdetails.*;import org.springframework.stereotype.Service;
+@Service @RequiredArgsConstructor public class CustomUserDetailsService implements UserDetailsService{private final UserAuthMapper mapper;public UserDetails loadUserByUsername(String username){SysUser u=mapper.findByUsername(username);if(u==null)throw new UsernameNotFoundException("用户不存在");return new LoginUser(u,mapper.findPermissions(u.getId()),mapper.findRoleCodes(u.getId()),mapper.findDataScope(u.getId()));}}

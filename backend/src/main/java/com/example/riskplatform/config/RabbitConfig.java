@@ -1,0 +1,3 @@
+package com.example.riskplatform.config;
+import org.springframework.amqp.core.*;import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;import org.springframework.context.annotation.*;
+@Configuration @ConditionalOnProperty(name="app.mq.enabled",havingValue="true")public class RabbitConfig{public static final String EXCHANGE="risk.metric.exchange",QUEUE="risk.metric.queue",ROUTING_KEY="risk.metric.created";@Bean DirectExchange exchange(){return new DirectExchange(EXCHANGE,true,false);}@Bean Queue queue(){return QueueBuilder.durable(QUEUE).build();}@Bean Binding binding(Queue q,DirectExchange e){return BindingBuilder.bind(q).to(e).with(ROUTING_KEY);}}

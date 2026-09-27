@@ -1,0 +1,3 @@
+package com.example.riskplatform.entity;
+import com.baomidou.mybatisplus.annotation.*;import lombok.Data;import java.time.*;import java.math.BigDecimal;
+@Data @TableName("competitor_product") public class Competitor{@TableId(type=IdType.AUTO)private Long id;private Long companyId;private String competitorName;private String productName;private String targetCustomer;private BigDecimal price;private String priceUnit;private String sellingPoint;private String weakness;private String promotion;private String deliveryCycle;private String serviceCommitment;private String riskLevel;private LocalDate updatedDate;private LocalDateTime createdAt;}
